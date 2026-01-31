@@ -1,0 +1,139 @@
+
+// --- VERY IMPORTANT INSTRUCTIONS ---
+// The form WILL NOT save data to Google Sheets until you complete these steps.
+//
+// 1.  **Open Your Google Sheet:**
+//     Go to: https://docs.google.com/spreadsheets/d/1KTAkc-dJZApXqOMYZXsIxIgSX1HNslaUyw9TVyfilK8/
+//
+// 2.  **Open the Script Editor:**
+//     In the top menu, click "Extensions" -> "Apps Script". A new tab will open.
+//
+// 3.  **Paste the Code:**
+//     Delete any existing code in the editor and paste this entire script.
+//
+// 4.  **Save the Script:**
+//     Click the floppy disk icon (Save project) at the top.
+//
+// 5.  **DEPLOY THE SCRIPT (Critical Step):**
+//     a. Click the blue "Deploy" button in the top-right corner.
+//     b. Select "New deployment".
+//     c. Click the gear icon next to "Select type" and choose "Web app".
+//     d. In the "Description" field, you can write "Ginza Collection Form API".
+//     e. For "Execute as", select "Me".
+//     f. For "Who has access", you **MUST** select "**Anyone**". This is required for the form to be able to send data.
+//     g. Click the "Deploy" button.
+//
+// 6.  **AUTHORIZE THE SCRIPT:**
+//     a. A pop-up will ask for authorization. Click "Authorize access".
+//     b. Choose your Google Account.
+//     c. You will see a warning screen "Google hasn't verified this app". This is normal. Click "Advanced" at the bottom.
+//     d. Click "Go to [Your Project Name] (unsafe)".
+//     e. Click "Allow" on the next screen to give the script permission to edit your spreadsheet.
+//
+// 7.  **COPY THE WEB APP URL:**
+//     a. After authorizing, a new dialog will appear with your "Web app URL". It will start with "https://script.google.com/...".
+//     b. **THIS IS THE MOST IMPORTANT STEP.** Click the "Copy" button to copy this URL.
+//
+// 8.  **PASTE THE URL INTO YOUR CODE:**
+//     a. Go back to your application code.
+//     b. Open the file named `services/googleSheetsService.ts`.
+//     c. Replace the placeholder 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL' with the URL you just copied.
+//     d. Save the file.
+//
+// Your form should now be connected to your Google Sheet!
+
+const SPREADSHEET_ID = '1KTAkc-dJZApXqOMYZXsIxIgSX1HNslaUyw9TVyfilK8';
+
+function doPost(e) {
+  try {
+    // --- DEBUGGING: Log the exact data received from the form ---
+    Logger.log('Received POST data: ' + e.postData.contents);
+
+    const data = JSON.parse(e.postData.contents);
+    
+    if (!data || !Array.isArray(data.entries) || !data.branch) {
+      const errorMessage = 'Invalid data received. Branch and entries are required. Received: ' + JSON.stringify(data);
+      Logger.log(errorMessage);
+      return ContentService
+        .createTextOutput(JSON.stringify({ 'status': 'error', 'message': errorMessage }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const branchName = data.branch.trim();
+    let sheet = spreadsheet.getSheetByName(branchName);
+
+    const headers = [
+      "Timestamp", "Date Range", "Date", "Branch", "Salesperson", 
+      "Customer Name", "Sales Order Amount", "Sales Collection Amount"
+    ];
+
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet(branchName);
+      sheet.appendRow(headers);
+      sheet.getRange("A1:H1").setFontWeight("bold").setBackground("#eeeeee");
+      sheet.setFrozenRows(1);
+    } else if (sheet.getLastRow() === 0) {
+      sheet.appendRow(headers);
+      sheet.getRange("A1:H1").setFontWeight("bold").setBackground("#eeeeee");
+      sheet.setFrozenRows(1);
+    }
+
+    const submissionTimestamp = new Date();
+    const dateRangeStr = `${data.dateRange.from} to ${data.dateRange.to}`;
+
+    const rowsToAdd = [];
+
+    // Add data rows
+    data.entries.forEach(entry => {
+      rowsToAdd.push([
+        submissionTimestamp,
+        dateRangeStr,
+        entry.date,
+        branchName,
+        data.employee,
+        entry.customerName,
+        entry.orderAmount,
+        entry.collectionAmount
+      ]);
+    });
+    
+    // Add separator
+    rowsToAdd.push(Array(headers.length).fill('')); 
+
+    // Add Weekly and Monthly summary rows
+    data.weeklySummaries.forEach(week => {
+        const weeklyRow = Array(headers.length).fill('');
+        weeklyRow[5] = `WEEK ${week.week} TOTAL:`;
+        weeklyRow[6] = week.orderAmount;
+        weeklyRow[7] = week.collectionAmount;
+        rowsToAdd.push(weeklyRow);
+    });
+
+    const monthlyRow = Array(headers.length).fill('');
+    monthlyRow[5] = `MONTHLY TOTAL:`;
+    monthlyRow[6] = data.monthlyTotals.orderAmount;
+    monthlyRow[7] = data.monthlyTotals.collectionAmount;
+    rowsToAdd.push(monthlyRow);
+    
+    // Add final separator
+    rowsToAdd.push(Array(headers.length).fill('---'));
+
+    if (rowsToAdd.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, headers.length).setValues(rowsToAdd);
+    }
+    
+    Logger.log(`Successfully added ${data.entries.length} entries to sheet '${branchName}'.`);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ 'status': 'success', 'message': `Data saved to '${branchName}' sheet.` }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    // --- DEBUGGING: Log any errors that occur ---
+    Logger.log("Error in Ginza Form Script: " + error.toString() + " Stack: " + error.stack);
+    return ContentService
+      .createTextOutput(JSON.stringify({ 'status': 'error', 'message': error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}

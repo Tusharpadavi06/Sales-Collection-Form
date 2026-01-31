@@ -1,0 +1,5 @@
+{
+  "name": "Ginza Industries Collection Form",
+  "description": "A form for Ginza Industries Limited to track and submit sales collection data. It features date range selection, automatic calculations, local data persistence, and submission to a Google Sheet.",
+  "requestFramePermissions": []
+}
