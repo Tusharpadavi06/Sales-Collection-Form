@@ -18,5 +18,6 @@ export interface FormState {
   dateRange: { from: Date | undefined; to: Date | undefined };
   branch: string;
   employee: string;
+  contact: string;
   entries: CollectionEntry[];
 }
