@@ -1,53 +1,23 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ginza Industries Collection Form</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      /* react-day-picker styles */
-      .rdp {
-        --rdp-cell-size: 40px;
-        --rdp-caption-font-size: 18px;
-        --rdp-accent-color: #1e40af; /* blue-800 */
-        --rdp-background-color: #eff6ff; /* blue-50 */
-        --rdp-accent-color-dark: #1d4ed8;
-        --rdp-background-color-dark: #1e3a8a;
-        --rdp-outline: 2px solid var(--rdp-accent-color);
-        --rdp-outline-selected: 3px solid var(--rdp-accent-color);
-        --rdp-selected-color: #fff;
-        margin: 1em 0;
-      }
-      .rdp-caption_label {
-        font-weight: bold;
-      }
-      .rdp-nav_button {
-        border-radius: 9999px;
-      }
-      .rdp-day_range_start, .rdp-day_range_end {
-        background-color: var(--rdp-accent-color) !important;
-        color: white;
-      }
-      .rdp-day_range_middle {
-        background-color: var(--rdp-background-color) !important;
-        color: var(--rdp-accent-color);
-      }
-    </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "date-fns": "https://esm.sh/date-fns@^4.1.0",
-    "react/": "https://esm.sh/react@^19.2.4/",
     "react": "https://esm.sh/react@^19.2.4",
-    "react-day-picker": "https://esm.sh/react-day-picker@^9.13.0"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-day-picker": "https://esm.sh/react-day-picker@^9.13.0",
+    "date-fns": "https://esm.sh/date-fns@^4.1.0"
   }
 }
 </script>
 </head>
   <body class="bg-gray-100">
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
