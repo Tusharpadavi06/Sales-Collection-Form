@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Official react-day-picker styles - Required for the calendar to look like a grid */
+@import "react-day-picker/dist/style.css";
+
+/* Custom Ginza Calendar Styles */
+.rdp {
+  --rdp-cell-size: 40px;
+  --rdp-caption-font-size: 18px;
+  --rdp-accent-color: #2563eb;
+  --rdp-background-color: #eff6ff;
+  --rdp-accent-color-dark: #1d4ed8;
+  --rdp-background-color-dark: #1e3a8a;
+  --rdp-outline: 2px solid var(--rdp-accent-color);
+  --rdp-outline-selected: 3px solid var(--rdp-accent-color);
+  --rdp-selected-color: #fff;
+  margin: 1em auto;
+}
+
+.rdp-day_selected, 
+.rdp-day_selected:focus-visible, 
+.rdp-day_selected:hover {
+  background-color: var(--rdp-accent-color) !important;
+  color: white !important;
+  opacity: 1 !important;
+}
+
+.rdp-day_range_middle {
+  background-color: var(--rdp-background-color) !important;
+  color: var(--rdp-accent-color) !important;
+}
+
+/* Fix for mobile responsiveness */
+@media (max-width: 640px) {
+  .rdp {
+    --rdp-cell-size: 35px;
+  }
+}
