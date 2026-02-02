@@ -1,9 +1,24 @@
 
+// =====================================================================================
+// TROUBLESHOOTING: If 'testWriteToSheet' works but the REAL FORM does not save data:
+//
+// The problem is almost always an old or incorrect Web App URL.
+// Every time you change this script, you MUST re-deploy it to make the changes live.
+//
+// TO FIX:
+// 1. Click "Deploy" -> "Manage deployments".
+// 2. Click the pencil (Edit) icon on your active deployment.
+// 3. Change "Version" to "New version".
+// 4. Click "Deploy".
+// 5. Copy the NEW Web App URL it gives you and paste it into your `services/googleSheetsService.ts` file.
+// =====================================================================================
+
+
 // --- VERY IMPORTANT INSTRUCTIONS ---
 // The form WILL NOT save data to Google Sheets until you complete these steps.
 //
 // 1.  **Open Your Google Sheet:**
-//     Go to: https://docs.google.com/spreadsheets/d/1KTAkc-dJZApXqOMYZXsIxIgSX1HNslaUyw9TVyfilK8/
+//     The ID has been set to the one you provided.
 //
 // 2.  **Open the Script Editor:**
 //     In the top menu, click "Extensions" -> "Apps Script". A new tab will open.
@@ -37,103 +52,169 @@
 // 8.  **PASTE THE URL INTO YOUR CODE:**
 //     a. Go back to your application code.
 //     b. Open the file named `services/googleSheetsService.ts`.
-//     c. Replace the placeholder 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL' with the URL you just copied.
+//     c. Replace the placeholder with the URL you just copied.
 //     d. Save the file.
 //
 // Your form should now be connected to your Google Sheet!
 
-const SPREADSHEET_ID = '1KTAkc-dJZApXqOMYZXsIxIgSX1HNslaUyw9TVyfilK8';
+const SPREADSHEET_ID = '1x7mRmDHQGLBzuvSy4Yp3kMogkwlNiGlTuxvqkw_djMw';
 
+// =================================================================
+// CORE LOGIC - This function does all the work of writing to the sheet.
+// =================================================================
+function processAndSaveData(data) {
+  if (!data || !data.reportId || !data.status || !data.branch) {
+    const errorMessage = 'Invalid data. `reportId`, `status`, and `branch` are required. Received: ' + JSON.stringify(data);
+    Logger.log(errorMessage);
+    return { 'status': 'error', 'message': errorMessage };
+  }
+
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const branchName = data.branch.trim();
+  let sheet = spreadsheet.getSheetByName(branchName);
+
+  const headers = [
+    "Timestamp", "Date Range", "Date", "Branch", "Salesperson",
+    "Customer Name", "Sales Order Amount", "Sales Collection Amount",
+    "Report ID", "Status"
+  ];
+  const REPORT_ID_COLUMN_INDEX = 9; // Column I (index 9)
+
+  // --- Sheet and Header Setup ---
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(branchName);
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#eeeeee");
+    sheet.setFrozenRows(1);
+  } else if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#eeeeee");
+    sheet.setFrozenRows(1);
+  }
+
+  // --- Find and Delete Existing Draft Rows ---
+  const reportIdToFind = data.reportId;
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
+  const rowsToDelete = [];
+
+  for (var i = values.length - 1; i >= 1; i--) { // Iterate backwards from the end
+    // Check if the Report ID in the sheet matches the one from the form
+    if (values[i][REPORT_ID_COLUMN_INDEX - 1] == reportIdToFind) {
+      // The row number is i + 1 because arrays are 0-indexed and sheets are 1-indexed
+      rowsToDelete.push(i + 1);
+    }
+  }
+
+  // Delete all identified rows. Iterating backwards in the loop above prevents index shifting issues.
+  rowsToDelete.forEach(function(rowNum) {
+    sheet.deleteRow(rowNum);
+    Logger.log(`Deleted existing row ${rowNum} for Report ID: ${reportIdToFind}`);
+  });
+  
+  // --- Prepare and Append New Data ---
+  const submissionTimestamp = new Date();
+  const dateRangeStr = `${data.dateRange.from} to ${data.dateRange.to}`;
+  const rowsToAdd = [];
+
+  data.entries.forEach(entry => {
+    rowsToAdd.push([
+      submissionTimestamp, dateRangeStr, entry.date, branchName,
+      data.employee, entry.customerName, entry.orderAmount, entry.collectionAmount,
+      data.reportId, data.status // Add new ID and Status fields
+    ]);
+  });
+  
+  // Add separators and summaries. These rows won't have a report ID.
+  const emptyRow = Array(headers.length).fill('');
+
+  rowsToAdd.push(emptyRow);
+
+  data.weeklySummaries.forEach(week => {
+    const weeklyRow = Array(headers.length).fill('');
+    weeklyRow[5] = `WEEK ${week.week} TOTAL:`;
+    weeklyRow[6] = week.orderAmount;
+    weeklyRow[7] = week.collectionAmount;
+    rowsToAdd.push(weeklyRow);
+  });
+
+  const monthlyRow = Array(headers.length).fill('');
+  monthlyRow[5] = `MONTHLY TOTAL:`;
+  monthlyRow[6] = data.monthlyTotals.orderAmount;
+  monthlyRow[7] = data.monthlyTotals.collectionAmount;
+  rowsToAdd.push(monthlyRow);
+  
+  // Add a final separator with the report ID for tracking
+  const finalSeparator = Array(headers.length).fill('---');
+  finalSeparator[REPORT_ID_COLUMN_INDEX - 1] = data.reportId;
+  rowsToAdd.push(finalSeparator);
+
+  if (rowsToAdd.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, headers.length).setValues(rowsToAdd);
+  }
+
+  Logger.log(`Successfully processed ${data.entries.length} entries for Report ID ${data.reportId} with status '${data.status}' to sheet '${branchName}'.`);
+  return { 'status': 'success', 'message': `Data saved to '${branchName}' sheet.` };
+}
+
+// =================================================================
+// WEB APP ENDPOINT - Handles incoming data from the form.
+// =================================================================
 function doPost(e) {
   try {
-    // --- DEBUGGING: Log the exact data received from the form ---
+    if (!e || !e.postData || !e.postData.contents) {
+      throw new Error("Received empty or invalid POST request.");
+    }
     Logger.log('Received POST data: ' + e.postData.contents);
-
     const data = JSON.parse(e.postData.contents);
-    
-    if (!data || !Array.isArray(data.entries) || !data.branch) {
-      const errorMessage = 'Invalid data received. Branch and entries are required. Received: ' + JSON.stringify(data);
-      Logger.log(errorMessage);
-      return ContentService
-        .createTextOutput(JSON.stringify({ 'status': 'error', 'message': errorMessage }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const branchName = data.branch.trim();
-    let sheet = spreadsheet.getSheetByName(branchName);
-
-    const headers = [
-      "Timestamp", "Date Range", "Date", "Branch", "Salesperson", 
-      "Customer Name", "Sales Order Amount", "Sales Collection Amount"
-    ];
-
-    if (!sheet) {
-      sheet = spreadsheet.insertSheet(branchName);
-      sheet.appendRow(headers);
-      sheet.getRange("A1:H1").setFontWeight("bold").setBackground("#eeeeee");
-      sheet.setFrozenRows(1);
-    } else if (sheet.getLastRow() === 0) {
-      sheet.appendRow(headers);
-      sheet.getRange("A1:H1").setFontWeight("bold").setBackground("#eeeeee");
-      sheet.setFrozenRows(1);
-    }
-
-    const submissionTimestamp = new Date();
-    const dateRangeStr = `${data.dateRange.from} to ${data.dateRange.to}`;
-
-    const rowsToAdd = [];
-
-    // Add data rows
-    data.entries.forEach(entry => {
-      rowsToAdd.push([
-        submissionTimestamp,
-        dateRangeStr,
-        entry.date,
-        branchName,
-        data.employee,
-        entry.customerName,
-        entry.orderAmount,
-        entry.collectionAmount
-      ]);
-    });
-    
-    // Add separator
-    rowsToAdd.push(Array(headers.length).fill('')); 
-
-    // Add Weekly and Monthly summary rows
-    data.weeklySummaries.forEach(week => {
-        const weeklyRow = Array(headers.length).fill('');
-        weeklyRow[5] = `WEEK ${week.week} TOTAL:`;
-        weeklyRow[6] = week.orderAmount;
-        weeklyRow[7] = week.collectionAmount;
-        rowsToAdd.push(weeklyRow);
-    });
-
-    const monthlyRow = Array(headers.length).fill('');
-    monthlyRow[5] = `MONTHLY TOTAL:`;
-    monthlyRow[6] = data.monthlyTotals.orderAmount;
-    monthlyRow[7] = data.monthlyTotals.collectionAmount;
-    rowsToAdd.push(monthlyRow);
-    
-    // Add final separator
-    rowsToAdd.push(Array(headers.length).fill('---'));
-
-    if (rowsToAdd.length > 0) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, headers.length).setValues(rowsToAdd);
-    }
-    
-    Logger.log(`Successfully added ${data.entries.length} entries to sheet '${branchName}'.`);
+    const result = processAndSaveData(data);
 
     return ContentService
-      .createTextOutput(JSON.stringify({ 'status': 'success', 'message': `Data saved to '${branchName}' sheet.` }))
+      .createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
-    // --- DEBUGGING: Log any errors that occur ---
-    Logger.log("Error in Ginza Form Script: " + error.toString() + " Stack: " + error.stack);
+    Logger.log("Error in doPost handler: " + error.toString() + " Stack: " + error.stack);
     return ContentService
       .createTextOutput(JSON.stringify({ 'status': 'error', 'message': error.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// =================================================================
+// TEST FUNCTION - Use this to test the script from the editor.
+// =================================================================
+function testWriteToSheet() {
+  try {
+    const mockData = {
+      "reportId": "test-uuid-" + new Date().getTime(),
+      "status": "Draft",
+      "branch": "Test Branch",
+      "employee": "Test Employee",
+      "dateRange": { "from": "01/08/2024", "to": "07/08/2024" },
+      "entries": [
+        { "id": "1", "date": "2024-08-01", "customerName": "Test Customer C", "orderAmount": 5000, "collectionAmount": 1000 },
+        { "id": "2", "date": "2024-08-02", "customerName": "Test Customer D", "orderAmount": 6000, "collectionAmount": 2500 }
+      ],
+      "weeklySummaries": [
+        { "week": 1, "orderAmount": 11000, "collectionAmount": 3500 }
+      ],
+      "monthlyTotals": { "orderAmount": 11000, "collectionAmount": 3500 }
+    };
+
+    Logger.log("--- STARTING SCRIPT TEST ---");
+    const result = processAndSaveData(mockData);
+    Logger.log("--- SCRIPT TEST COMPLETE ---");
+    Logger.log("Test result: " + JSON.stringify(result));
+    
+    Logger.log("Now testing update (Final)...");
+    mockData.status = "Final";
+    mockData.entries.push({ "id": "3", "date": "2024-08-03", "customerName": "Test Customer E", "orderAmount": 100, "collectionAmount": 100 });
+    const finalResult = processAndSaveData(mockData);
+     Logger.log("Test result (Final): " + JSON.stringify(finalResult));
+
+
+  } catch (error) {
+    Logger.log("Error during testWriteToSheet execution: " + error.toString() + " Stack: " + error.stack);
   }
 }

@@ -14,6 +14,7 @@ export interface WeeklySummary {
 }
 
 export interface FormState {
+  reportId: string | null;
   dateRange: { from: Date | undefined; to: Date | undefined };
   branch: string;
   employee: string;

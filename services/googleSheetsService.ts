@@ -3,14 +3,15 @@ import type { CollectionEntry, WeeklySummary } from '../types';
 
 // =====================================================================================
 // !!! CRITICAL STEP !!!
-// YOU MUST REPLACE THE LINE BELOW WITH THE WEB APP URL FROM GOOGLE APPS SCRIPT.
-// The URL will start with "https://script.google.com/..."
-// The long string of letters/numbers you used before was the SPREADSHEET ID, which is incorrect.
-// Please get the correct URL by following the deployment instructions in 'google-apps-script.js.txt'.
+// YOU MUST REPLACE THE LINE BELOW WITH THE WEB APP URL FROM YOUR NEWEST GOOGLE APPS SCRIPT DEPLOYMENT.
+// Follow the deployment instructions in 'google-apps-script.js.txt' carefully.
+// The URL will start with "https://script.google.com/...".
 // =====================================================================================
-const GOOGLE_SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyd9KGljCPPWO26dxLcEB_TWg-ISWRIjZoPzJ8qBsUHHpOO1Jo9KkQXGR1By4K_IpBF/exec';
+const GOOGLE_SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbwHyGQmO8_Q4HKvT_TdDWLa7dSgJox-rdCF80a_CJeEokN9FEHlB5x_P-Omz5OiOAsV/exec';
 
 export interface SubmissionData {
+    reportId: string;
+    status: 'Draft' | 'Final';
     branch: string;
     employee: string;
     dateRange: { from: string; to: string };
@@ -22,7 +23,7 @@ export interface SubmissionData {
 export const submitToGoogleSheet = async (data: SubmissionData): Promise<void> => {
     // This check ensures you have replaced the placeholder with a valid URL.
     if (!GOOGLE_SHEET_API_URL || !GOOGLE_SHEET_API_URL.startsWith('https://script.google.com/macros/s/')) {
-        const errorMessage = "The Google Sheets URL is incorrect. It must be a deployed Web App URL starting with 'https://script.google.com/...'. Please check the setup instructions.";
+        const errorMessage = "The Google Sheets URL is incorrect or missing. It must be a deployed Web App URL starting with 'https://script.google.com/...'. Please check the setup instructions.";
         console.error(errorMessage);
         throw new Error(errorMessage);
     }

@@ -5,12 +5,14 @@ import { format, isAfter, endOfDay, parseISO } from 'date-fns';
 import type { CollectionEntry, WeeklySummary, FormState } from '../types';
 import { PlusIcon, TrashIcon, SaveIcon, PaperAirplaneIcon } from './Icons';
 import { submitToGoogleSheet, SubmissionData } from '../services/googleSheetsService';
+import { salesData } from '../data/branchData';
 
 const getWeekOfMonth = (date: Date): number => {
     return Math.ceil(date.getDate() / 7);
 };
 
 const initialFormState: FormState = {
+    reportId: null,
     dateRange: { from: undefined, to: undefined },
     branch: '',
     employee: '',
@@ -36,22 +38,43 @@ const CollectionForm: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-    const { dateRange, branch, employee, entries } = formState;
+    const { reportId, dateRange, branch, employee, entries } = formState;
+
+    // Derived state for dropdowns
+    const branches = useMemo(() => {
+        const branchSet = new Set(salesData.map(item => item.branch));
+        return Array.from(branchSet).sort();
+    }, []);
+
+    const employeesForBranch = useMemo(() => {
+        if (!branch) return [];
+        return salesData
+            .filter(item => item.branch === branch)
+            .map(item => item.name)
+            .sort();
+    }, [branch]);
+
 
     useEffect(() => {
-        // Only save when there is actual data to prevent overwriting with initial state on load
-        if (dateRange.from || branch || employee || entries.length > 0) {
-            localStorage.setItem('ginzaCollectionForm', JSON.stringify(formState));
-        }
-    }, [formState, dateRange.from, branch, employee, entries.length]);
+        localStorage.setItem('ginzaCollectionForm', JSON.stringify(formState));
+    }, [formState]);
 
     const handleDateRangeSelect = (range: { from?: Date; to?: Date } | undefined) => {
         setFormState(prev => ({ ...prev, dateRange: { from: range?.from, to: range?.to } }));
     };
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormState(prev => ({ ...prev, [name]: value }));
+    };
+    
+    const handleBranchChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newBranch = e.target.value;
+        setFormState(prev => ({
+            ...prev,
+            branch: newBranch,
+            employee: '' // Reset employee when branch changes
+        }));
     };
 
     const addEntry = () => {
@@ -76,12 +99,6 @@ const CollectionForm: React.FC = () => {
 
     const removeEntry = (id: string) => {
         setFormState(prev => ({ ...prev, entries: prev.entries.filter(entry => entry.id !== id) }));
-    };
-    
-    const handleSave = () => {
-        localStorage.setItem('ginzaCollectionForm', JSON.stringify(formState));
-        setStatusMessage({ type: 'success', text: 'Form progress saved to this device!' });
-        setTimeout(() => setStatusMessage(null), 3000);
     };
 
     const summaries = useMemo(() => {
@@ -113,16 +130,25 @@ const CollectionForm: React.FC = () => {
 
         return { weekly: weeklySummaries, monthly: { orderAmount: monthlyOrder, collectionAmount: monthlyCollection } };
     }, [entries]);
-
-    const handleSubmit = async () => {
+    
+    const handleSubmission = async (status: 'Draft' | 'Final') => {
         if (!branch) {
             setStatusMessage({ type: 'error', text: 'Branch name is required to submit.' });
+            return;
+        }
+        if (!employee) {
+            setStatusMessage({ type: 'error', text: 'Employee name is required to submit.' });
             return;
         }
         setIsSubmitting(true);
         setStatusMessage(null);
 
+        // Generate a new report ID only if one doesn't already exist for this form session
+        const currentReportId = reportId || crypto.randomUUID();
+
         const submissionData: SubmissionData = {
+            reportId: currentReportId,
+            status,
             branch,
             employee,
             dateRange: {
@@ -136,15 +162,23 @@ const CollectionForm: React.FC = () => {
 
         try {
             await submitToGoogleSheet(submissionData);
-            setStatusMessage({ type: 'success', text: 'Data sent to Google Sheet! Please check the sheet to confirm it was received.' });
-            // Clear state and local storage after successful submission
-            setFormState(initialFormState);
-            localStorage.removeItem('ginzaCollectionForm');
+            if (status === 'Final') {
+                 setStatusMessage({ type: 'success', text: 'Final report submitted successfully! Form has been cleared.' });
+                 setFormState(initialFormState);
+                 localStorage.removeItem('ginzaCollectionForm');
+            } else {
+                 setStatusMessage({ type: 'success', text: 'Draft successfully saved to Google Sheet!' });
+                 // If this was the first time saving, update state with the new reportId
+                 if (!reportId) {
+                     setFormState(prev => ({ ...prev, reportId: currentReportId }));
+                 }
+            }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
             setStatusMessage({ type: 'error', text: `Submission failed: ${errorMessage}` });
         } finally {
             setIsSubmitting(false);
+            setTimeout(() => setStatusMessage(null), 5000);
         }
     };
     
@@ -169,7 +203,7 @@ const CollectionForm: React.FC = () => {
     return (
         <div className="space-y-10">
             {statusMessage && (
-                <div className={`p-4 rounded-lg text-white font-semibold shadow-md ${statusMessage.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
+                <div className={`p-4 rounded-lg text-white font-semibold shadow-md fixed top-24 right-8 z-50 animate-pulse ${statusMessage.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
                     {statusMessage.text}
                 </div>
             )}
@@ -204,11 +238,17 @@ const CollectionForm: React.FC = () => {
                         )}
                         <div>
                             <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-1">Branch Name <span className="text-red-500">*</span></label>
-                            <input type="text" id="branch" name="branch" value={branch} onChange={handleInputChange} className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., Mumbai HO"/>
+                            <select id="branch" name="branch" value={branch} onChange={handleBranchChange} className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                <option value="">-- Select a Branch --</option>
+                                {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
                         </div>
                         <div>
-                            <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">Employee Name</label>
-                            <input type="text" id="employee" name="employee" value={employee} onChange={handleInputChange} className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., John Doe"/>
+                            <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">Employee Name <span className="text-red-500">*</span></label>
+                            <select id="employee" name="employee" value={employee} onChange={handleInputChange} disabled={!branch} className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed">
+                                <option value="">{branch ? '-- Select a Sales Person --' : 'Select a branch first'}</option>
+                                {employeesForBranch.map(name => <option key={name} value={name}>{name}</option>)}
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -283,24 +323,25 @@ const CollectionForm: React.FC = () => {
             <div className="p-4 bg-white rounded-xl shadow-xl sticky bottom-4 border-t-4 border-blue-600">
                  <div className="flex flex-col sm:flex-row gap-4 justify-end">
                      <button 
-                        onClick={handleSave} 
-                        className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-lg shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all"
-                        title="Save your progress to this browser. Does NOT send to Google Sheets."
+                        onClick={() => handleSubmission('Draft')} 
+                        disabled={isSubmitting || entries.length === 0}
+                        className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-lg shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        title="Save a draft to the Google Sheet. You can update this later."
                      >
-                         <SaveIcon /> Save Progress to Device
+                         <SaveIcon /> {isSubmitting ? 'Saving...' : 'Save Draft to Sheet'}
                      </button>
                      <button
-                        onClick={handleSubmit}
+                        onClick={() => handleSubmission('Final')}
                         disabled={isSubmitDisabled || isSubmitting || entries.length === 0}
                         className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all"
                         title="Finalize and send all data to the Google Sheet."
                      >
-                        {isSubmitting ? 'Submitting...' : <><PaperAirplaneIcon /> Submit Data to Google Sheet</>}
+                        {isSubmitting ? 'Submitting...' : <><PaperAirplaneIcon /> Finalize & Submit Report</>}
                      </button>
                  </div>
                  <div className="text-xs text-center text-gray-500 mt-3 space-y-1">
-                    <p><span className="font-semibold">Save Progress to Device:</span> Saves your work *only in this browser* so you can continue later. It does NOT send data to the Google Sheet.</p>
-                    <p><span className="font-semibold">Submit Data to Google Sheet:</span> Sends the final report to the Google Sheet and clears the form for the next entry.</p>
+                    <p><span className="font-semibold">Save Draft to Sheet:</span> Sends a temporary copy to the Google Sheet. Use this to save your progress. It will be replaced when you finalize.</p>
+                    <p><span className="font-semibold">Finalize & Submit Report:</span> This submits the final, permanent version to the Google Sheet and clears the form.</p>
                     {isSubmitDisabled && dateRange.to && (
                         <p className="font-semibold text-red-600 mt-1">
                             Submit button will be enabled on or after {format(dateRange.to, 'dd-MM-yyyy')}.

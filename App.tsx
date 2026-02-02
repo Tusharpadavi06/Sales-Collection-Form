@@ -1,7 +1,7 @@
 
 import React from 'react';
 import CollectionForm from './components/CollectionForm';
-import { ginzaLogoBase64 } from './assets/logo';
+import { ginzaLogoUrl } from './assets/logo';
 
 const App: React.FC = () => {
   return (
@@ -9,7 +9,7 @@ const App: React.FC = () => {
       <header className="bg-white shadow-lg sticky top-0 z-10">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img src={ginzaLogoBase64} alt="Ginza Industries Logo" className="h-12 w-auto" />
+            <img src={ginzaLogoUrl} alt="Ginza Industries Logo" className="h-12 w-auto" />
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight">Ginza Industries Ltd.</h1>
               <p className="text-sm text-gray-500">Sales Collection Form</p>
