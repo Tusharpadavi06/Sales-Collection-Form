@@ -24,7 +24,7 @@ export const salesData: SalesPerson[] = [
     { branch: "Delhi", name: "Suresh Nautiyal" },
     { branch: "Delhi", name: "Rahul Vashishtha" },
     { branch: "Delhi", name: "Mohit Sharma" },
-    { branch: "Ahmedabad", name: "Ravindra Kaushik" },
+    { branch: "Ahmedabad", name: "ravindra kaushik" },
     { branch: "Bangalore", name: "Murali Krishna" },
     { branch: "Bangalore", name: "Balasubramanyam" },
     { branch: "Bangalore", name: "Tarachand" },
